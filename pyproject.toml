@@ -1,0 +1,17 @@
+[project]
+name = "ev-adoption-forecast"
+version = "0.1.0"
+description = "Production ML pipeline forecasting EV adoption curves (cars & two-wheelers) by country using diffusion modeling"
+authors = [
+    {name = "Aryan KC",email = "aryankc70@gmail.com"}
+]
+requires-python = "^3.12"
+dependencies = [
+]
+
+[tool.poetry]
+packages = [{ include = "ev_forecast", from = "src" }]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
