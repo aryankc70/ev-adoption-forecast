@@ -33,3 +33,11 @@ Nepal's Cars EV sales share rose from ~10% (2021) to ~74% (2024) — one of the 
 1. Fit per-country models rather than a single global curve — takeoff timing and curve steepness vary too much to pool naively.
 2. Include policy/incentive covariates where available, since multiple countries show non-monotonic, policy-driven share changes that a pure time-based S-curve cannot capture.
 3. Two-wheeler and Cars models must be trained/evaluated separately, with wheelers limited to the 44-country subset.
+
+## Outlier / sanity scan
+
+- No rows exceed 100% sales share (0 invalid rows found) — clean bound on the target variable.
+- One large year-over-year jump found: Iceland 2/3-wheelers EV sales share rose from ~11% (2019) to 55% (2020).
+  - Confirmed as a genuine small-market effect, not a data error: absolute EV 2/3-wheeler sales in Iceland were only 25 units (2019) → 300 units (2020) — a real but low-volume spike.
+  - Iceland also has missing years (2013–2014) in this series.
+- **Implication for modeling:** small-market countries can show high variance in share terms purely from small denominators. Consider either (a) weighting country loss by market size during training/evaluation, or (b) flagging low-volume countries (e.g. <1,000 annual units) separately rather than treating their curves with equal confidence to large markets like China or Germany.
