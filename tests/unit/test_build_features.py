@@ -4,8 +4,10 @@ import pandas as pd
 
 from ev_forecast.features.build_features import (
     _add_lag_features,
+    _add_sample_weight,
     _add_takeoff_features,
     _pivot_target,
+    train_test_split_by_year,
 )
 
 
@@ -146,3 +148,90 @@ class TestTakeoffFeatures:
         testland = result.sort_values("year")
         testland = testland[testland["region_country"] == "Testland"]
         assert testland["cumulative_years_tracked"].tolist() == [1, 2, 3]
+
+
+class TestSampleWeight:
+    def test_larger_volume_gets_larger_weight(self) -> None:
+        df = pd.DataFrame(
+            {
+                "region_country": ["Small", "Large"],
+                "mode": ["Cars", "Cars"],
+                "year": [2020, 2020],
+                "ev_sales_volume": [100.0, 1_000_000.0],
+            }
+        )
+        result = _add_sample_weight(df)
+        small_weight = result[result["region_country"] == "Small"]["sample_weight"].iloc[0]
+        large_weight = result[result["region_country"] == "Large"]["sample_weight"].iloc[0]
+        assert large_weight > small_weight
+
+    def test_weight_is_log_compressed_not_linear(self) -> None:
+        df = pd.DataFrame(
+            {
+                "region_country": ["Small", "Large"],
+                "mode": ["Cars", "Cars"],
+                "year": [2020, 2020],
+                "ev_sales_volume": [100.0, 1_000_000.0],
+            }
+        )
+        result = _add_sample_weight(df)
+        small_weight = result[result["region_country"] == "Small"]["sample_weight"].iloc[0]
+        large_weight = result[result["region_country"] == "Large"]["sample_weight"].iloc[0]
+
+        raw_ratio = 1_000_000.0 / 100.0
+        weight_ratio = large_weight / small_weight
+        assert weight_ratio < raw_ratio / 10  # log-scaling should massively compress the ratio
+
+    def test_missing_volume_does_not_crash(self) -> None:
+        df = pd.DataFrame(
+            {
+                "region_country": ["NoVolume"],
+                "mode": ["Cars"],
+                "year": [2020],
+                "ev_sales_volume": [None],
+            }
+        )
+        result = _add_sample_weight(df)
+        assert result["sample_weight"].iloc[0] == 0.0
+
+
+class TestTrainTestSplit:
+    def test_split_respects_year_boundary(self) -> None:
+        df = pd.DataFrame(
+            {
+                "region_country": ["A", "A", "A", "A"],
+                "mode": ["Cars"] * 4,
+                "year": [2020, 2021, 2022, 2023],
+                "ev_sales_share": [1.0, 2.0, 3.0, 4.0],
+            }
+        )
+        train, test = train_test_split_by_year(df, split_year=2021)
+        assert set(train["year"]) == {2020, 2021}
+        assert set(test["year"]) == {2022, 2023}
+
+    def test_split_applies_uniformly_across_countries(self) -> None:
+        df = pd.DataFrame(
+            {
+                "region_country": ["A", "A", "B", "B"],
+                "mode": ["Cars"] * 4,
+                "year": [2020, 2022, 2020, 2022],
+                "ev_sales_share": [1.0, 2.0, 3.0, 4.0],
+            }
+        )
+        train, test = train_test_split_by_year(df, split_year=2021)
+        # Both countries should be split at the same year, not e.g. by row count
+        assert set(train["region_country"]) == {"A", "B"}
+        assert set(test["region_country"]) == {"A", "B"}
+
+    def test_no_row_appears_in_both_sets(self) -> None:
+        df = pd.DataFrame(
+            {
+                "region_country": ["A"] * 6,
+                "mode": ["Cars"] * 6,
+                "year": [2018, 2019, 2020, 2021, 2022, 2023],
+                "ev_sales_share": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            }
+        )
+        train, test = train_test_split_by_year(df, split_year=2021)
+        overlap = set(train["year"]) & set(test["year"])
+        assert overlap == set()
