@@ -89,3 +89,54 @@ However, its current recursive-forecast weakness on fast-growing, near-saturatio
 countries is a known, documented limitation -- not silently ignored -- and a
 candidate for future improvement (e.g. modeling growth *rate* rather than absolute
 share level, or blending with the logistic baseline for countries already past takeoff).
+
+## Hyperparameter Tuning (LightGBM)
+
+Tuned via time-series cross-validation (expanding-window, cutoffs at 2018 and 2019,
+2-year forecast horizon per fold, all strictly within the training period so the true
+2022-2025 test set stayed genuinely held out until final evaluation). Grid search over
+54 combinations of n_estimators, learning_rate, max_depth, num_leaves.
+
+Best params: n_estimators=150, learning_rate=0.03, max_depth=7, num_leaves=15 (smaller,
+slower-learning models won -- consistent with how little data each country/mode group
+has, often as few as 8-12 years).
+
+**Final test-set result (2022-2025, recursive forecast, evaluated once):**
+
+| Model | Median MAPE | RMSE |
+|---|---|---|
+| Logistic baseline | 38.6% | 4.8 |
+| LightGBM (untuned) | 35.2% | 10.1 |
+| LightGBM (tuned) | 34.9% | 10.0 |
+
+**Tuning provided only marginal improvement.** This is an important, honest finding:
+tuning cannot fix a structural limitation. LightGBM's core weakness (cannot extrapolate
+past its training target range, causing the Norway plateau) is not an overfitting or
+capacity problem that more/better hyperparameters can solve -- it is inherent to how
+tree-based models work. No hyperparameter configuration lets a tree output a value it
+never saw in training.
+
+## Final Model Selection
+
+The baseline and tuned LightGBM have genuinely complementary, opposite failure modes:
+
+- **Logistic baseline**: wins on RMSE (extrapolates smoothly for countries still in
+  active growth, like Norway) but fails on trend reversals it cannot see coming
+  (Costa Rica, Germany post-subsidy).
+- **Tuned LightGBM**: wins on median MAPE (reacts to recent lag/trend signals, so
+  typical-case predictions are somewhat sharper) but cannot extrapolate past observed
+  ranges, causing severe underprediction for fast-growing, near-saturation countries.
+
+Neither model is unconditionally better. For this project, **the logistic baseline is
+selected as the primary production model**, on the basis that RMSE (which penalizes
+large absolute errors) is the more important metric for a threshold-crossing use case
+(the project's stated goal is estimating *when* a country crosses 50%/90%/95% share --
+being badly wrong on a fast-growing country like Norway is a worse failure than being
+moderately wrong on a typical country). LightGBM is retained and documented as a
+secondary reference model.
+
+**Documented future improvement path** (out of scope for this version): a hybrid
+approach that routes each country/mode to whichever model handles its regime better --
+e.g. use the baseline for countries already past their diffusion inflection point
+(fast, near-saturation growth), and the GBM for countries still in an uncertain
+early/flat phase where trend reversals are more likely.
