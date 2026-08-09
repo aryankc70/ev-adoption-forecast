@@ -42,3 +42,8 @@ mlartifacts/
 
 # Docker
 *.log
+
+# MLflow
+mlruns/
+mlartifacts/
+mlflow.db

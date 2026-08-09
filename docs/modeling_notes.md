@@ -140,3 +140,49 @@ approach that routes each country/mode to whichever model handles its regime bet
 e.g. use the baseline for countries already past their diffusion inflection point
 (fast, near-saturation growth), and the GBM for countries still in an uncertain
 early/flat phase where trend reversals are more likely.
+
+## Final Model Selection (Corrected)
+
+**An earlier version of this section contained a metric-comparison error, caught and
+fixed via MLflow's structured run tracking (Phase 6).** The original comparison
+mistakenly compared the baseline's *median-per-group* RMSE (4.8) against the GBMs'
+*aggregate* RMSE (10.1-12.5) -- different statistics answering different questions --
+and concluded the baseline was more robust. Logging every model through the same
+tracking schema with unambiguous metric names (`rmse_aggregate` vs
+`rmse_median_per_group`) surfaced the inconsistency immediately.
+
+**Corrected, apples-to-apples comparison (test years 2022-2025):**
+
+| Model | MAPE (aggregate) | MAPE (median/group) | RMSE (aggregate) | RMSE (median/group) |
+|---|---|---|---|---|
+| Logistic baseline | 135.3% | 38.6% | 17.88 | 4.81 |
+| LightGBM (tuned) | 51.7% | 34.9% | 10.04 | 5.19 |
+| LightGBM (untuned) | 50.5% | 35.2% | 10.13 | 5.07 |
+| XGBoost (untuned) | 50.3% | 35.9% | 10.40 | 4.80 |
+| sklearn GBM (untuned) | 60.9% | 37.7% | 12.51 | 5.65 |
+
+**On aggregate metrics, the baseline is the worst model on every measure.** Its failure
+mode (Costa Rica: predicting 82% share when actual was 0.11%) is structurally unbounded
+-- a logistic curve fit to a short rising sequence can extrapolate arbitrarily far past
+the true ceiling. The GBMs' failure mode (Norway: plateauing at ~46% instead of climbing
+to 97%) is bounded by construction (tree leaves cannot exceed their training target
+range), producing large but strictly limited errors.
+
+On median-per-group metrics (each country weighted equally, so no single country's
+extreme error dominates), the baseline is roughly tied with XGBoost on RMSE but still
+the worst model on MAPE.
+
+**Revised selection: tuned LightGBM is selected as the primary production model**, on
+the basis that aggregate RMSE is the more decision-relevant metric for real deployment
+risk -- an unbounded worst-case failure (baseline) is a larger practical liability than
+a bounded one (GBM), even when the "typical" per-country case is similar across models.
+The baseline's core strength (extrapolating cleanly for countries still in active growth,
+like Norway) is retained as a documented, known weakness of the selected model, and is
+the clearest candidate for future improvement (e.g. clipping GBM predictions using a
+country's own logistic-fit trajectory as an upper bound for near-saturation cases).
+
+**Process lesson:** this is a concrete example of why every model must be logged through
+one consistent, unambiguously-labeled tracking schema rather than compared via ad-hoc
+printed output -- the original error was entirely plausible-looking at each individual
+step, and only became visible once every run sat side-by-side in the same table with
+clearly distinguished metric names.
