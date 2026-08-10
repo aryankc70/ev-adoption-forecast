@@ -47,3 +47,6 @@ mlartifacts/
 mlruns/
 mlartifacts/
 mlflow.db
+
+# Trained model artifacts (regenerable via train_final_model.py)
+models/
