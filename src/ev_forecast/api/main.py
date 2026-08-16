@@ -1,6 +1,8 @@
 """FastAPI serving app for EV adoption share forecasts."""
 
 import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -13,19 +15,13 @@ from ev_forecast.api.schemas import HealthResponse, PredictionRequest, Predictio
 
 MODEL_DIR = Path(__file__).resolve().parents[3] / "models" / "production"
 
-app = FastAPI(
-    title="EV Adoption Forecast API",
-    description="Forecasts EV sales share by country and vehicle mode using a tuned LightGBM model.",
-    version="1.0.0",
-)
-
 _model: Any = None
 _feature_columns: list[str] = []
 _group_states: dict[tuple[str, str], dict] = {}
 
 
-@app.on_event("startup")
-def load_model_artifacts() -> None:
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """Load the trained model and its supporting artifacts once, at process startup."""
     global _model, _feature_columns, _group_states
 
@@ -40,6 +36,16 @@ def load_model_artifacts() -> None:
 
     states_raw = json.loads((MODEL_DIR / "group_states.json").read_text())
     _group_states = {(s["region_country"], s["mode"]): s for s in states_raw}
+
+    yield
+
+
+app = FastAPI(
+    title="EV Adoption Forecast API",
+    description="Forecasts EV sales share by country and vehicle mode using a tuned LightGBM model.",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
 
 @app.get("/health", response_model=HealthResponse)
